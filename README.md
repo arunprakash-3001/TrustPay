@@ -185,25 +185,26 @@ python app.py
 
 ---
 
+## 📸 Screenshots
 
-Screenshots
-![WhatsApp Image 2 2026-04-05 at 2 05 51 PM](https://github.com/user-attachments/assets/1f747e54-fa7f-4047-8a49-a149c2824144)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/1f747e54-fa7f-4047-8a49-a149c2824144" width="250"/>
+  <img src="https://github.com/user-attachments/assets/14976f39-726b-41fa-abde-ce686bcc1463" width="250"/>
+  <img src="https://github.com/user-attachments/assets/e38105fd-8347-42ef-bbd8-7d9474a43d43" width="250"/>
+</p>
 
-![WhatsApp Image 2026-04-05 at 2 06 02 PM](https://github.com/user-attachments/assets/14976f39-726b-41fa-abde-ce686bcc1463)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3f625908-3ea1-4194-9f4f-be80dac09363" width="250"/>
+  <img src="https://github.com/user-attachments/assets/d21293b3-5532-4376-9ea6-3dc2381ef6fb" width="250"/>
+  <img src="https://github.com/user-attachments/assets/6140dff2-1e4d-48db-bb65-1ee226670172" width="250"/>
+</p>
 
-![WhatsApp Image 2026-04-05 at 2 05 51 PM](https://github.com/user-attachments/assets/e38105fd-8347-42ef-bbd8-7d9474a43d43)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/6ad4f5b4-bba7-4395-9aa0-ecb4019bb4ca" width="250"/>
+  <img src="https://github.com/user-attachments/assets/27467c33-d77e-4380-b121-4cc14015cca8" width="250"/>
+  <img src="https://github.com/user-attachments/assets/f6f0a4b7-5d68-4cc9-8667-dbf7bef77dc3" width="250"/>
+</p>
 
-![WhatsApp Image 2026-04-05 at 2 08 47 PM](https://github.com/user-attachments/assets/3f625908-3ea1-4194-9f4f-be80dac09363)
-
-![WhatsApp Image 2026-04-05 at 2 06 37 PM](https://github.com/user-attachments/assets/d21293b3-5532-4376-9ea6-3dc2381ef6fb)
-
-![WhatsApp Image 2026-04-05 at 2 06 38 PM 4](https://github.com/user-attachments/assets/6140dff2-1e4d-48db-bb65-1ee226670172)
-
-![WhatsApp Image 2026-04-05 at 2 06 39 PM 6](https://github.com/user-attachments/assets/6ad4f5b4-bba7-4395-9aa0-ecb4019bb4ca)
-
-![WhatsApp Image 2026-04-05 at 2 06 38 PM  3](https://github.com/user-attachments/assets/27467c33-d77e-4380-b121-4cc14015cca8)
-
-![WhatsApp Image 2026-04-05 at 2 06 39 PM 8](https://github.com/user-attachments/assets/f6f0a4b7-5d68-4cc9-8667-dbf7bef77dc3)
-
-![WhatsApp Image 2026-04-05 at 2 06 39 PM 7](https://github.com/user-attachments/assets/17b42f00-98a9-433f-ab39-1deae8d5af4f)
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/17b42f00-98a9-433f-ab39-1deae8d5af4f" width="250"/>
+</p>
