@@ -56,25 +56,36 @@ def generate_mobile():
 
 
 def decode_base64_image(face_image_base64):
-    if "," in face_image_base64:
-        face_image_base64 = face_image_base64.split(",", 1)[1]
+    try:
+        if "," in face_image_base64:
+            face_image_base64 = face_image_base64.split(",", 1)[1]
 
-    image_bytes = base64.b64decode(face_image_base64)
-    np_array = np.frombuffer(image_bytes, np.uint8)
-    return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        image_bytes = base64.b64decode(face_image_base64)
+        np_array = np.frombuffer(image_bytes, np.uint8)
+        return cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+    except Exception:
+        return None
 
 
-def extract_face_embedding(face_image_base64):
-    image = decode_base64_image(face_image_base64)
+def normalize_embedding(embedding):
+    vector = np.array(embedding, dtype=np.float32)
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+        return None
+    return (vector / norm).tolist()
+
+
+def extract_face_embedding_from_image(image):
     if image is None:
         return None
 
     if facenet_embedder is not None:
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        detections = facenet_embedder.extract(rgb_image, threshold=0.90)
+        detections = facenet_embedder.extract(rgb_image, threshold=0.85)
 
         if len(detections) == 1:
-            return detections[0]["embedding"].astype("float32").tolist()
+            embedding = detections[0]["embedding"].astype("float32").tolist()
+            return normalize_embedding(embedding)
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
@@ -113,7 +124,12 @@ def extract_face_embedding(face_image_base64):
     face_crop = cv2.resize(face_crop, (16, 8))
     face_crop = cv2.equalizeHist(face_crop)
     embedding = face_crop.astype("float32").flatten() / 255.0
-    return embedding.tolist()
+    return normalize_embedding(embedding.tolist())
+
+
+def extract_face_embedding(face_image_base64):
+    image = decode_base64_image(face_image_base64)
+    return extract_face_embedding_from_image(image)
 
 
 def cosine_similarity(first_embedding, second_embedding):
@@ -283,11 +299,19 @@ def verify_face():
     if not stored_embeddings:
         stored_embeddings = [user.get("face_embedding")]
 
-    live_embedding = extract_face_embedding(face_image)
+    live_image = decode_base64_image(face_image)
+    live_embedding = extract_face_embedding_from_image(live_image)
+    mirrored_live_embedding = None
+    if live_image is not None:
+        mirrored_live_embedding = extract_face_embedding_from_image(cv2.flip(live_image, 1))
 
     stored_embeddings = [embedding for embedding in stored_embeddings if embedding]
 
-    if not stored_embeddings or live_embedding is None:
+    candidate_embeddings = [
+        embedding for embedding in [live_embedding, mirrored_live_embedding] if embedding
+    ]
+
+    if not stored_embeddings or not candidate_embeddings:
         return jsonify({
             "status": "error",
             "verified": False,
@@ -296,9 +320,10 @@ def verify_face():
 
     similarity_scores = []
     for stored_embedding in stored_embeddings:
-        score = cosine_similarity(stored_embedding, live_embedding)
-        if score is not None:
-            similarity_scores.append(score)
+        for candidate_embedding in candidate_embeddings:
+            score = cosine_similarity(stored_embedding, candidate_embedding)
+            if score is not None:
+                similarity_scores.append(score)
 
     if not similarity_scores:
         return jsonify({

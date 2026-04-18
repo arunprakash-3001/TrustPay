@@ -31,7 +31,7 @@ public class TransactionActivity extends AppCompatActivity {
     String receiverUpi;
 
 
-    String HISTORY_URL = "http://10.41.17.76:5000/history";
+    String HISTORY_URL = "http://10.230.212.76:5000/history";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

@@ -32,6 +32,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
+import com.example.trustpay.network.ApiClient;
 import com.example.trustpay.ui.result.DeclineActivity;
 import com.example.trustpay.ui.verification.PinActivity;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -52,12 +53,11 @@ public class LivenessActivity extends AppCompatActivity {
     private ExecutorService cameraExecutor;
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
+    private FaceAnalyzer faceAnalyzer;
     String senderUpi;
     String receiverUpi;
     String amount;
     boolean isFaceVerificationRunning = false;
-
-    String VERIFY_FACE_URL = "http://10.41.17.76:5000/verify-face";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +76,12 @@ public class LivenessActivity extends AppCompatActivity {
         senderUpi = getIntent().getStringExtra("sender_upi");
         receiverUpi = getIntent().getStringExtra("receiver_upi");
         amount = getIntent().getStringExtra("amount");
+
+        if (senderUpi == null || senderUpi.trim().isEmpty()) {
+            Toast.makeText(this, "Sender UPI is missing for verification", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
 
         // ✅ Handle permission ONCE
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -145,7 +151,7 @@ public class LivenessActivity extends AppCompatActivity {
             RequestQueue queue = Volley.newRequestQueue(this);
             JsonObjectRequest request = new JsonObjectRequest(
                     Request.Method.POST,
-                    VERIFY_FACE_URL,
+                    ApiClient.getEndpoint("verify-face"),
                     jsonBody,
                     response -> {
                         isFaceVerificationRunning = false;
@@ -160,14 +166,17 @@ public class LivenessActivity extends AppCompatActivity {
                             startActivity(intent);
                             finish();
                         } else {
-                            goToDecline("Face does not match registered user");
+                            goToDecline(response.optString(
+                                    "message",
+                                    "Face does not match registered user"
+                            ));
                         }
                     },
                     error -> {
                         isFaceVerificationRunning = false;
                         String message = "Face verification failed";
                         if (error.networkResponse != null && error.networkResponse.data != null) {
-                            message = new String(error.networkResponse.data);
+                            message = extractMessage(new String(error.networkResponse.data));
                         }
                         goToDecline(message);
                     }) {
@@ -183,6 +192,15 @@ public class LivenessActivity extends AppCompatActivity {
         } catch (Exception e) {
             isFaceVerificationRunning = false;
             goToDecline("Face verification error");
+        }
+    }
+
+    private String extractMessage(String rawResponse) {
+        try {
+            JSONObject object = new JSONObject(rawResponse);
+            return object.optString("message", rawResponse);
+        } catch (Exception ignored) {
+            return rawResponse;
         }
     }
 
@@ -228,12 +246,11 @@ public class LivenessActivity extends AppCompatActivity {
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build();
 
-                imageAnalysis.setAnalyzer(cameraExecutor,
-                        new FaceAnalyzer(
-                                message -> runOnUiThread(() -> tvLivenessInstruction.setText(message)),
-                                () -> runOnUiThread(this::onLivenessSuccess)
-                        )
+                faceAnalyzer = new FaceAnalyzer(
+                        message -> runOnUiThread(() -> tvLivenessInstruction.setText(message)),
+                        () -> runOnUiThread(this::onLivenessSuccess)
                 );
+                imageAnalysis.setAnalyzer(cameraExecutor, faceAnalyzer);
 
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA;
 
@@ -243,7 +260,7 @@ public class LivenessActivity extends AppCompatActivity {
                 );
 
             } catch (Exception e) {
-                e.printStackTrace();
+                Toast.makeText(this, "Unable to start verification camera", Toast.LENGTH_SHORT).show();
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -313,6 +330,9 @@ public class LivenessActivity extends AppCompatActivity {
 
         if (cameraProvider != null) {
             cameraProvider.unbindAll();
+        }
+        if (faceAnalyzer != null) {
+            faceAnalyzer.close();
         }
         if (cameraExecutor != null) {
             cameraExecutor.shutdown();

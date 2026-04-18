@@ -83,7 +83,7 @@ public class RegisterActivity extends AppCompatActivity {
     private boolean isValidFaceDetected = false;
     private String capturedFaceBase64 = null;
 
-    String BASE_URL = "http://10.41.17.76:5000/register";
+    String BASE_URL = "http://10.230.212.76:5000/register";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
