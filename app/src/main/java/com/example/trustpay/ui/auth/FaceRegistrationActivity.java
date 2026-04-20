@@ -45,8 +45,9 @@ import com.google.mlkit.vision.face.FaceDetection;
 import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -321,28 +322,20 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                                    @NonNull Response<RegisterResponse> response) {
                 btnSubmitRegister.setEnabled(true);
 
-                if (response.isSuccessful() && response.body() != null) {
-                    String message = response.body().getMessage();
-                    if (response.body().getUpiId() != null) {
-                        message = message + "\nUPI: " + response.body().getUpiId();
-                    }
-                    Toast.makeText(FaceRegistrationActivity.this, message, Toast.LENGTH_LONG).show();
-
-                    Intent intent = new Intent(FaceRegistrationActivity.this, LoginActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(intent);
-                    finish();
+                if (response.isSuccessful() && response.body() != null
+                        && "success".equalsIgnoreCase(response.body().getStatus())) {
+                    showRegistrationSuccessDialog(response.body());
                 } else {
-                    String errorMessage = "Registration failed. Please recapture your face.";
+                    String errorMessage = "Face not registered. Please recapture your face.";
                     try {
                         if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
+                            errorMessage = getBackendErrorMessage(response.errorBody().string());
                         }
                     } catch (Exception ignored) {
                     }
                     Toast.makeText(
                             FaceRegistrationActivity.this,
-                            errorMessage,
+                            "Face not registered: " + errorMessage,
                             Toast.LENGTH_LONG
                     ).show();
                 }
@@ -353,11 +346,52 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                 btnSubmitRegister.setEnabled(true);
                 Toast.makeText(
                         FaceRegistrationActivity.this,
-                        "Network error: " + t.getMessage(),
+                        "Face not registered. Network error: " + t.getMessage(),
                         Toast.LENGTH_LONG
                 ).show();
             }
         });
+    }
+
+    private void showRegistrationSuccessDialog(RegisterResponse response) {
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        String message = "All poses get registered successfully";
+        if (response.getUpiId() != null && !response.getUpiId().isEmpty()) {
+            message = message + "\nUPI: " + response.getUpiId();
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Registration Successful")
+                .setMessage(message)
+                .setCancelable(false)
+                .setPositiveButton("Back to Login Page", (dialog, which) -> {
+                    getSharedPreferences("user_data", MODE_PRIVATE).edit().clear().apply();
+                    Intent intent = new Intent(FaceRegistrationActivity.this, LoginActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                    finish();
+                })
+                .show();
+    }
+
+    private String getBackendErrorMessage(String errorBody) {
+        if (errorBody == null || errorBody.trim().isEmpty()) {
+            return "Please recapture your face.";
+        }
+
+        try {
+            JSONObject jsonObject = new JSONObject(errorBody);
+            String message = jsonObject.optString("message");
+            if (!message.isEmpty()) {
+                return message;
+            }
+        } catch (Exception ignored) {
+        }
+
+        return errorBody;
     }
 
     private void saveCurrentPoseCapture(String faceBase64) {

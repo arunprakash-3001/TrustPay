@@ -38,6 +38,7 @@ import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
 import com.example.trustpay.network.ApiClient;
 import com.example.trustpay.network.ApiService;
+import com.example.trustpay.network.BackendConfig;
 import com.example.trustpay.network.RegisterRequest;
 import com.example.trustpay.network.RegisterResponse;
 import com.google.android.material.button.MaterialButton;
@@ -83,7 +84,7 @@ public class RegisterActivity extends AppCompatActivity {
     private boolean isValidFaceDetected = false;
     private String capturedFaceBase64 = null;
 
-    String BASE_URL = "http://10.41.17.76:5000/register";
+    String BASE_URL = BackendConfig.endpoint("register");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

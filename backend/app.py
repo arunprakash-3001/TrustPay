@@ -254,6 +254,29 @@ def login():
     }), 200
 
 
+@app.route("/receiver/<receiver_input>", methods=["GET"])
+def receiver_details(receiver_input):
+    user = users.find_one({
+        "$or": [
+            {"upi_id": receiver_input},
+            {"mobile": receiver_input}
+        ]
+    })
+
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "Receiver not found"
+        }), 404
+
+    return jsonify({
+        "success": True,
+        "name": user.get("name", ""),
+        "mobile": user.get("mobile", ""),
+        "upi": user.get("upi_id", "")
+    }), 200
+
+
 @app.route("/verify-face", methods=["POST"])
 def verify_face():
 
@@ -361,7 +384,8 @@ def make_transaction():
     if sender.get("balance", 0) < float(amount):
         return jsonify({
             "success": False,
-            "message": "Insufficient balance"
+            "message": "Insufficient balance",
+            "balance": sender.get("balance", 0)
         }), 400
 
     receiver = users.find_one({"upi_id": receiver_input})
@@ -397,7 +421,9 @@ def make_transaction():
 
     return jsonify({
         "success": True,
-        "message": "Transaction successful"
+        "message": "Transaction successful",
+        "sender_balance": users.find_one({"upi_id": sender_upi}).get("balance", 0),
+        "receiver_balance": users.find_one({"upi_id": receiver_upi}).get("balance", 0)
     }), 200
 
 

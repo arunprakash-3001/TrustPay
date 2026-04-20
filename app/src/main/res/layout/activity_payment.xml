@@ -22,18 +22,19 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="New Transaction"
+                android:text="Payment"
                 android:textColor="@android:color/white"
                 android:textSize="26sp"
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tvReceiverName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Pay by UPI ID or phone number"
+                android:layout_marginTop="8dp"
                 android:textColor="#EAF2FF"
-                android:textSize="14sp" />
+                android:textSize="18sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
@@ -50,62 +51,48 @@
                 android:orientation="vertical"
                 android:padding="24dp">
 
+                <TextView
+                    android:id="@+id/tvReceiverMobile"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/trust_text_dark"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvReceiverUpi"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/trust_text_dark"
+                    android:textSize="16sp" />
+
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Receiver UPI ID or Phone Number"
+                    android:layout_marginTop="24dp"
+                    android:hint="Amount"
                     app:boxCornerRadiusBottomEnd="18dp"
                     app:boxCornerRadiusBottomStart="18dp"
                     app:boxCornerRadiusTopEnd="18dp"
                     app:boxCornerRadiusTopStart="18dp">
 
                     <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/editTextReceiverUpi"
+                        android:id="@+id/editTextAmount"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text" />
+                        android:inputType="numberDecimal" />
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <TextView
-                    android:id="@+id/tvLookupStatus"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPay"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:textColor="@color/trust_text_muted"
-                    android:textSize="14sp" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardReceiverResult"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    app:cardBackgroundColor="#F5FAFF"
-                    app:cardCornerRadius="18dp"
-                    app:cardElevation="3dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="18dp">
-
-                        <TextView
-                            android:id="@+id/tvReceiverName"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="@color/trust_text_dark"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tvReceiverDetails"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:textColor="@color/trust_text_muted"
-                            android:textSize="14sp" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                    android:layout_marginTop="24dp"
+                    android:padding="14dp"
+                    android:text="Pay Securely"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/trust_blue"
+                    app:cornerRadius="18dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

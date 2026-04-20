@@ -13,6 +13,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
+import com.example.trustpay.network.BackendConfig;
 import com.example.trustpay.ui.dashboard.DashboardActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
@@ -25,11 +26,21 @@ public class LoginActivity extends AppCompatActivity {
     MaterialButton btnLogin;
     TextView tvRegister;
 
-    String LOGIN_URL = "http://10.41.17.76:5000/login";
+    String LOGIN_URL = BackendConfig.endpoint("login");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        SharedPreferences savedSession = getSharedPreferences("user_data", MODE_PRIVATE);
+        if (savedSession.getBoolean("is_logged_in", false)) {
+            Intent intent = new Intent(LoginActivity.this, DashboardActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_login);
 
         etEmail = findViewById(R.id.etEmail);
@@ -94,9 +105,11 @@ public class LoginActivity extends AppCompatActivity {
                         editor.putString("email", userEmail);
                         editor.putString("mobile", mobile);
                         editor.putString("upi", upi);
+                        editor.putBoolean("is_logged_in", true);
 
                         editor.apply();
 
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(intent);
                         finish();
                     },

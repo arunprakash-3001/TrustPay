@@ -32,6 +32,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
+import com.example.trustpay.network.BackendConfig;
 import com.example.trustpay.ui.result.DeclineActivity;
 import com.example.trustpay.ui.verification.PinActivity;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -57,7 +58,7 @@ public class LivenessActivity extends AppCompatActivity {
     String amount;
     boolean isFaceVerificationRunning = false;
 
-    String VERIFY_FACE_URL = "http://10.41.17.76:5000/verify-face";
+    String VERIFY_FACE_URL = BackendConfig.endpoint("verify-face");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

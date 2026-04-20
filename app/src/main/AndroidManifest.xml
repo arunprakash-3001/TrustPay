@@ -22,6 +22,8 @@
         <activity android:name=".ui.auth.RegisterActivity" />
         <activity android:name=".ui.result.ResultActivity" />
         <activity android:name=".ui.verification.VerificationActivity" />
+        <activity android:name=".ui.transaction.QrScannerActivity" />
+        <activity android:name=".ui.transaction.PaymentActivity" />
         <activity android:name=".ui.transaction.TransactionActivity" />
         <activity android:name=".ui.dashboard.DashboardActivity" />
         <activity android:name=".ui.liveness.LivenessActivity" />
