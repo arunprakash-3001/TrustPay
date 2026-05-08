@@ -2,12 +2,12 @@ package com.example.trustpay.ui.verification;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.widget.Toast;
+import android.view.View;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.trustpay.R;
-import com.example.trustpay.ui.liveness.LivenessActivity;
+import com.example.trustpay.ui.result.ResultActivity;
 import com.google.android.material.button.MaterialButton;
 
 public class VerificationActivity extends AppCompatActivity {
@@ -21,26 +21,12 @@ public class VerificationActivity extends AppCompatActivity {
 
         btnVerify = findViewById(R.id.btnVerify);
 
-        btnVerify.setOnClickListener(v -> {
-            String senderUpi = getIntent().getStringExtra("sender_upi");
-            String receiverUpi = getIntent().getStringExtra("receiver_upi");
-            String amount = getIntent().getStringExtra("amount");
-
-            if (senderUpi == null || senderUpi.trim().isEmpty()) {
-                Toast.makeText(
-                        VerificationActivity.this,
-                        "Missing transaction details for face verification",
-                        Toast.LENGTH_SHORT
-                ).show();
-                return;
+        btnVerify.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(VerificationActivity.this, ResultActivity.class);
+                startActivity(intent);
             }
-
-            Intent intent = new Intent(VerificationActivity.this, LivenessActivity.class);
-            intent.putExtra("sender_upi", senderUpi);
-            intent.putExtra("receiver_upi", receiverUpi);
-            intent.putExtra("amount", amount);
-            startActivity(intent);
-            finish();
         });
     }
 }

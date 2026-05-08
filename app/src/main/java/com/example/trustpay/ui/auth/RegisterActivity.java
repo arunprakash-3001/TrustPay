@@ -13,6 +13,7 @@ import android.media.Image;
 import android.os.Bundle;
 import android.util.Base64;
 import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,6 +39,7 @@ import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
 import com.example.trustpay.network.ApiClient;
 import com.example.trustpay.network.ApiService;
+import com.example.trustpay.network.BackendConfig;
 import com.example.trustpay.network.RegisterRequest;
 import com.example.trustpay.network.RegisterResponse;
 import com.google.android.material.button.MaterialButton;
@@ -70,6 +72,7 @@ public class RegisterActivity extends AppCompatActivity {
     private static final float CENTER_TOLERANCE_RATIO = 0.18f;
 
     TextInputEditText etName, etEmail, etMobile, etPassword, etUpiPin, etBalance;
+    Spinner spinnerRole;
     PreviewView previewView;
     ImageView ivFacePreview;
     TextView tvFaceStatus;
@@ -83,7 +86,7 @@ public class RegisterActivity extends AppCompatActivity {
     private boolean isValidFaceDetected = false;
     private String capturedFaceBase64 = null;
 
-    String BASE_URL = "http://10.230.212.76:5000/register";
+    String BASE_URL = BackendConfig.endpoint("register");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,6 +99,7 @@ public class RegisterActivity extends AppCompatActivity {
         etPassword = findViewById(R.id.etPassword);
         etUpiPin = findViewById(R.id.etUpiPin);
         etBalance = findViewById(R.id.etBalance); // ✅ NEW
+        spinnerRole = findViewById(R.id.spinnerRole);
 
         btnRegister = findViewById(R.id.btnRegister);
 
@@ -166,6 +170,7 @@ public class RegisterActivity extends AppCompatActivity {
         intent.putExtra("password", password);
         intent.putExtra("upi_pin", upiPin);
         intent.putExtra("balance", balanceText);
+        intent.putExtra("role", spinnerRole.getSelectedItem().toString().toLowerCase());
         startActivity(intent);
     }
 
@@ -512,7 +517,8 @@ public class RegisterActivity extends AppCompatActivity {
                 password,
                 upiPin,
                 balance,
-                capturedFaceBase64
+                capturedFaceBase64,
+                spinnerRole.getSelectedItem().toString().toLowerCase()
         );
 
         apiService.registerUser(request).enqueue(new Callback<RegisterResponse>() {

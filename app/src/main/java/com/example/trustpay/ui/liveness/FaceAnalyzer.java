@@ -1,22 +1,22 @@
 package com.example.trustpay.ui.liveness;
 
 import android.annotation.SuppressLint;
-import android.media.Image;
+import com.google.mlkit.vision.face.Face;
 import android.util.Log;
+import com.google.mlkit.vision.face.FaceDetector;
+
+import android.media.Image;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
-import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
-import java.util.List;
-
 public class FaceAnalyzer implements ImageAnalysis.Analyzer {
+    private static final int LOW_LIGHT_LUMA_THRESHOLD = 72;
 
     public interface OnLivenessDetectedListener {
         void onLivenessDetected();
@@ -26,12 +26,12 @@ public class FaceAnalyzer implements ImageAnalysis.Analyzer {
         void onInstructionUpdate(String message);
     }
 
-    private final OnLivenessDetectedListener listener;
-    private final OnInstructionUpdateListener instructionListener;
+    private OnLivenessDetectedListener listener;
+    private OnInstructionUpdateListener instructionListener;
     private boolean isCompleted = false;
 
     public FaceAnalyzer(OnLivenessDetectedListener listener) {
-        this(null, listener);
+        this.listener = listener;
     }
 
     public FaceAnalyzer(OnInstructionUpdateListener instructionListener,
@@ -44,31 +44,23 @@ public class FaceAnalyzer implements ImageAnalysis.Analyzer {
     private boolean isHeadTurnDetected = false;
     private boolean isStraightFaceReady = false;
 
-    private final FaceDetectorOptions options =
+    FaceDetectorOptions options =
             new FaceDetectorOptions.Builder()
                     .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                     .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
                     .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
                     .build();
 
-    private final FaceDetector detector = FaceDetection.getClient(options);
+    FaceDetector detector = FaceDetection.getClient(options);
 
     @Override
     public void analyze(@NonNull ImageProxy imageProxy) {
-        if (isCompleted) {
-            imageProxy.close();
-            return;
-        }
 
         @SuppressLint("UnsafeOptInUsageError")
         Image mediaImage = imageProxy.getImage();
 
-        if (mediaImage == null) {
-            imageProxy.close();
-            return;
-        }
-
         if (mediaImage != null) {
+            boolean lowLightFrame = calculateAverageLuma(mediaImage) < LOW_LIGHT_LUMA_THRESHOLD;
             InputImage image =
                     InputImage.fromMediaImage(mediaImage,
                             imageProxy.getImageInfo().getRotationDegrees());
@@ -77,12 +69,9 @@ public class FaceAnalyzer implements ImageAnalysis.Analyzer {
                     .addOnSuccessListener(faces -> {
 
                         if (faces.isEmpty() && instructionListener != null && !isCompleted) {
-                            instructionListener.onInstructionUpdate("Show your face clearly");
-                        }
-
-                        if (faces.size() > 1 && instructionListener != null && !isCompleted) {
-                            instructionListener.onInstructionUpdate("Only one face should be visible");
-                            return;
+                            instructionListener.onInstructionUpdate(lowLightFrame
+                                    ? "Low light detected. Face a brighter light"
+                                    : "Show your face clearly");
                         }
 
                         for (Face face : faces) {
@@ -98,22 +87,28 @@ public class FaceAnalyzer implements ImageAnalysis.Analyzer {
                             // 🔄 Head Turn Detection
                             float rotY = face.getHeadEulerAngleY();
 
-                            if (Math.abs(rotY) > 15) {
+                            if (Math.abs(rotY) > (lowLightFrame ? 8 : 15)) {
                                 isHeadTurnDetected = true;
                             }
 
-                            boolean eyesOpenNow = leftEye != null
+                            boolean eyesOpenNow = lowLightFrame
+                                    || (leftEye != null
                                     && rightEye != null
                                     && leftEye > 0.6
-                                    && rightEye > 0.6;
-                            boolean faceStraightNow = Math.abs(rotY) < 8;
+                                    && rightEye > 0.6);
+                            boolean faceStraightNow = Math.abs(rotY) < (lowLightFrame ? 14 : 8);
                             isStraightFaceReady = isBlinkDetected
                                     && isHeadTurnDetected
                                     && eyesOpenNow
                                     && faceStraightNow;
 
                             if (!isCompleted && instructionListener != null) {
-                                if (!isBlinkDetected) {
+                                if (lowLightFrame && !isStraightFaceReady) {
+                                    instructionListener.onInstructionUpdate(getLowLightInstruction(
+                                            isBlinkDetected,
+                                            isHeadTurnDetected
+                                    ));
+                                } else if (!isBlinkDetected) {
                                     instructionListener.onInstructionUpdate("Blink your eyes");
                                 } else if (!isHeadTurnDetected) {
                                     instructionListener.onInstructionUpdate("Turn your face left or right");
@@ -136,16 +131,36 @@ public class FaceAnalyzer implements ImageAnalysis.Analyzer {
                             }
                         }
                     })
-                    .addOnFailureListener(e -> {
-                        if (instructionListener != null && !isCompleted) {
-                            instructionListener.onInstructionUpdate("Unable to analyze face. Try again");
-                        }
-                    })
                     .addOnCompleteListener(task -> imageProxy.close());
+        } else {
+            imageProxy.close();
         }
     }
 
-    public void close() {
-        detector.close();
+    private String getLowLightInstruction(boolean blinkDetected, boolean headTurnDetected) {
+        if (!blinkDetected) {
+            return "Low light detected. Face a brighter light and blink";
+        }
+        if (!headTurnDetected) {
+            return "Low light detected. Slowly turn your face";
+        }
+        return "Low light detected. Hold still and look straight";
+    }
+
+    private int calculateAverageLuma(Image image) {
+        java.nio.ByteBuffer buffer = image.getPlanes()[0].getBuffer().duplicate();
+        int remaining = buffer.remaining();
+        if (remaining <= 0) {
+            return 255;
+        }
+
+        long sum = 0;
+        int sampleCount = 0;
+        int step = Math.max(1, remaining / 1200);
+        for (int i = 0; i < remaining; i += step) {
+            sum += buffer.get(i) & 0xFF;
+            sampleCount++;
+        }
+        return sampleCount == 0 ? 255 : (int) (sum / sampleCount);
     }
 }

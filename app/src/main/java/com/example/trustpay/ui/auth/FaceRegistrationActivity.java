@@ -5,13 +5,18 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.media.Image;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.Range;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,6 +27,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ExperimentalGetImage;
+import androidx.camera.core.Camera;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
@@ -45,8 +51,9 @@ import com.google.mlkit.vision.face.FaceDetection;
 import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -59,8 +66,10 @@ import retrofit2.Response;
 public class FaceRegistrationActivity extends AppCompatActivity {
 
     private static final int CAMERA_PERMISSION_CODE = 201;
-    private static final float MIN_EYE_OPEN_PROBABILITY = 0.45f;
+    private static final float MIN_EYE_OPEN_PROBABILITY = 0.30f;
     private static final float CENTER_TOLERANCE_RATIO = 0.18f;
+    private static final float LOW_LIGHT_CENTER_TOLERANCE_RATIO = 0.28f;
+    private static final int LOW_LIGHT_LUMA_THRESHOLD = 72;
     private static final int STEP_FRONT_FACE = 0;
     private static final int STEP_LEFT_FACE = 1;
     private static final int STEP_RIGHT_FACE = 2;
@@ -82,6 +91,7 @@ public class FaceRegistrationActivity extends AppCompatActivity {
     private String frontFaceBase64 = null;
     private String leftFaceBase64 = null;
     private String rightFaceBase64 = null;
+    private boolean isLowLightFrame = false;
 
     private String username;
     private String email;
@@ -89,6 +99,7 @@ public class FaceRegistrationActivity extends AppCompatActivity {
     private String password;
     private String upiPin;
     private double balance;
+    private String role;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,6 +118,7 @@ public class FaceRegistrationActivity extends AppCompatActivity {
         password = getIntent().getStringExtra("password");
         upiPin = getIntent().getStringExtra("upi_pin");
         balance = Double.parseDouble(getIntent().getStringExtra("balance"));
+        role = getIntent().getStringExtra("role");
 
         previewView.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
@@ -160,13 +172,14 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                 imageAnalysis.setAnalyzer(cameraExecutor, this::analyzeFaceFrame);
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(
+                Camera camera = cameraProvider.bindToLifecycle(
                         this,
                         CameraSelector.DEFAULT_FRONT_CAMERA,
                         preview,
                         imageCapture,
                         imageAnalysis
                 );
+                applyLowLightCameraSettings(camera);
             } catch (Exception e) {
                 Toast.makeText(this, "Unable to start camera", Toast.LENGTH_SHORT).show();
             }
@@ -188,6 +201,7 @@ public class FaceRegistrationActivity extends AppCompatActivity {
 
         int imageWidth = inputImage.getWidth();
         int imageHeight = inputImage.getHeight();
+        isLowLightFrame = calculateAverageLuma(mediaImage) < LOW_LIGHT_LUMA_THRESHOLD;
 
         faceDetector.process(inputImage)
                 .addOnSuccessListener(faces -> updateFaceValidation(faces, imageWidth, imageHeight))
@@ -213,22 +227,33 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                     && rightEyeOpen != null
                     && leftEyeOpen >= MIN_EYE_OPEN_PROBABILITY
                     && rightEyeOpen >= MIN_EYE_OPEN_PROBABILITY;
+            if (isLowLightFrame) {
+                eyesOpen = leftEyeOpen == null
+                        || rightEyeOpen == null
+                        || leftEyeOpen >= 0.12f
+                        || rightEyeOpen >= 0.12f;
+            }
 
             float boxCenterX = box.centerX();
             float boxCenterY = box.centerY();
             float frameCenterX = imageWidth / 2f;
             float frameCenterY = imageHeight / 2f;
-            boolean centered = Math.abs(boxCenterX - frameCenterX) <= imageWidth * CENTER_TOLERANCE_RATIO
-                    && Math.abs(boxCenterY - frameCenterY) <= imageHeight * CENTER_TOLERANCE_RATIO;
+            float centerTolerance = isLowLightFrame
+                    ? LOW_LIGHT_CENTER_TOLERANCE_RATIO
+                    : CENTER_TOLERANCE_RATIO;
+            boolean centered = Math.abs(boxCenterX - frameCenterX) <= imageWidth * centerTolerance
+                    && Math.abs(boxCenterY - frameCenterY) <= imageHeight * centerTolerance;
 
             boolean poseOk;
             if (currentCaptureStep == STEP_FRONT_FACE) {
-                poseOk = Math.abs(headY) <= 10;
+                poseOk = Math.abs(headY) <= (isLowLightFrame ? 14 : 10);
             } else {
-                poseOk = Math.abs(headY) >= 12;
+                poseOk = Math.abs(headY) >= (isLowLightFrame ? 9 : 12);
             }
 
-            validFace = eyesOpen && centered && poseOk;
+            boolean largeEnough = box.width() >= imageWidth * 0.18f
+                    && box.height() >= imageHeight * 0.18f;
+            validFace = eyesOpen && centered && poseOk && largeEnough;
         }
 
         boolean finalValidFace = validFace;
@@ -274,10 +299,11 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                         }
 
                         Bitmap rotatedBitmap = rotateAndMirrorBitmap(bitmap, rotationDegrees);
-                        String faceBase64 = encodeBitmapToBase64(rotatedBitmap);
+                        Bitmap enhancedBitmap = enhanceFaceBitmap(rotatedBitmap);
+                        String faceBase64 = encodeBitmapToBase64(enhancedBitmap);
 
                         runOnUiThread(() -> {
-                            ivCapturedFace.setImageBitmap(rotatedBitmap);
+                            ivCapturedFace.setImageBitmap(enhancedBitmap);
                             saveCurrentPoseCapture(faceBase64);
                         });
                     }
@@ -311,7 +337,8 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                 balance,
                 frontFaceBase64,
                 leftFaceBase64,
-                rightFaceBase64
+                rightFaceBase64,
+                role
         );
 
         ApiService apiService = ApiClient.getClient().create(ApiService.class);
@@ -321,28 +348,20 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                                    @NonNull Response<RegisterResponse> response) {
                 btnSubmitRegister.setEnabled(true);
 
-                if (response.isSuccessful() && response.body() != null) {
-                    String message = response.body().getMessage();
-                    if (response.body().getUpiId() != null) {
-                        message = message + "\nUPI: " + response.body().getUpiId();
-                    }
-                    Toast.makeText(FaceRegistrationActivity.this, message, Toast.LENGTH_LONG).show();
-
-                    Intent intent = new Intent(FaceRegistrationActivity.this, LoginActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(intent);
-                    finish();
+                if (response.isSuccessful() && response.body() != null
+                        && "success".equalsIgnoreCase(response.body().getStatus())) {
+                    showRegistrationSuccessDialog(response.body());
                 } else {
-                    String errorMessage = "Registration failed. Please recapture your face.";
+                    String errorMessage = "Face not registered. Please recapture your face.";
                     try {
                         if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
+                            errorMessage = getBackendErrorMessage(response.errorBody().string());
                         }
                     } catch (Exception ignored) {
                     }
                     Toast.makeText(
                             FaceRegistrationActivity.this,
-                            errorMessage,
+                            "Face not registered: " + errorMessage,
                             Toast.LENGTH_LONG
                     ).show();
                 }
@@ -353,11 +372,52 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                 btnSubmitRegister.setEnabled(true);
                 Toast.makeText(
                         FaceRegistrationActivity.this,
-                        "Network error: " + t.getMessage(),
+                        "Face not registered. Network error: " + t.getMessage(),
                         Toast.LENGTH_LONG
                 ).show();
             }
         });
+    }
+
+    private void showRegistrationSuccessDialog(RegisterResponse response) {
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        String message = "All poses get registered successfully";
+        if (response.getUpiId() != null && !response.getUpiId().isEmpty()) {
+            message = message + "\nUPI: " + response.getUpiId();
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Registration Successful")
+                .setMessage(message)
+                .setCancelable(false)
+                .setPositiveButton("Back to Login Page", (dialog, which) -> {
+                    getSharedPreferences("user_data", MODE_PRIVATE).edit().clear().apply();
+                    Intent intent = new Intent(FaceRegistrationActivity.this, LoginActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(intent);
+                    finish();
+                })
+                .show();
+    }
+
+    private String getBackendErrorMessage(String errorBody) {
+        if (errorBody == null || errorBody.trim().isEmpty()) {
+            return "Please recapture your face.";
+        }
+
+        try {
+            JSONObject jsonObject = new JSONObject(errorBody);
+            String message = jsonObject.optString("message");
+            if (!message.isEmpty()) {
+                return message;
+            }
+        } catch (Exception ignored) {
+        }
+
+        return errorBody;
     }
 
     private void saveCurrentPoseCapture(String faceBase64) {
@@ -403,6 +463,9 @@ public class FaceRegistrationActivity extends AppCompatActivity {
     }
 
     private String getCurrentPoseInstruction() {
+        if (isLowLightFrame && currentCaptureStep != STEP_DONE) {
+            return "Low light detected. Face a brighter light";
+        }
         if (currentCaptureStep == STEP_FRONT_FACE) {
             return "Look straight at camera";
         }
@@ -416,6 +479,9 @@ public class FaceRegistrationActivity extends AppCompatActivity {
     }
 
     private String getCurrentPoseReadyMessage() {
+        if (isLowLightFrame && currentCaptureStep != STEP_DONE) {
+            return "Low light mode ready. Hold still and capture";
+        }
         if (currentCaptureStep == STEP_FRONT_FACE) {
             return "Straight face aligned. Tap Capture Front Face";
         }
@@ -434,6 +500,51 @@ public class FaceRegistrationActivity extends AppCompatActivity {
                 .setMessage(message)
                 .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
                 .show();
+    }
+
+    private void applyLowLightCameraSettings(Camera camera) {
+        try {
+            Range<Integer> range = camera.getCameraInfo()
+                    .getExposureState()
+                    .getExposureCompensationRange();
+            if (range != null && range.getUpper() > 0) {
+                int boost = Math.min(range.getUpper(), 2);
+                camera.getCameraControl().setExposureCompensationIndex(boost);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private int calculateAverageLuma(Image image) {
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer().duplicate();
+        int remaining = buffer.remaining();
+        if (remaining <= 0) {
+            return 255;
+        }
+
+        long sum = 0;
+        int sampleCount = 0;
+        int step = Math.max(1, remaining / 1200);
+        for (int i = 0; i < remaining; i += step) {
+            sum += buffer.get(i) & 0xFF;
+            sampleCount++;
+        }
+        return sampleCount == 0 ? 255 : (int) (sum / sampleCount);
+    }
+
+    private Bitmap enhanceFaceBitmap(Bitmap bitmap) {
+        Bitmap output = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+        ColorMatrix matrix = new ColorMatrix(new float[]{
+                1.28f, 0f, 0f, 0f, 26f,
+                0f, 1.28f, 0f, 0f, 26f,
+                0f, 0f, 1.28f, 0f, 26f,
+                0f, 0f, 0f, 1f, 0f
+        });
+        paint.setColorFilter(new ColorMatrixColorFilter(matrix));
+        canvas.drawBitmap(bitmap, 0f, 0f, paint);
+        return output;
     }
 
     private Bitmap imageProxyToBitmap(ImageProxy imageProxy) {

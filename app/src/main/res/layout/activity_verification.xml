@@ -18,10 +18,10 @@
             android:text="Live Verification"
             android:textSize="26sp"
             android:textStyle="bold"
-            android:textColor="#1A237E"
+            android:textColor="#4A148C"
             android:layout_marginBottom="24dp"/>
 
-        <!-- Real verification flow starts after tapping continue -->
+        <!-- Camera Placeholder -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="250dp"
@@ -38,14 +38,14 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Face Verification"
+                    android:text="Camera Preview"
                     android:textSize="18sp"
                     android:textStyle="bold"/>
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="The live camera check opens on the next screen"
+                    android:text="(Face Verification Simulation)"
                     android:textSize="14sp"
                     android:layout_marginTop="6dp"/>
 
@@ -57,7 +57,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Continue to the live camera verification step"
+            android:text="Please blink your eyes to verify"
             android:textSize="16sp"
             android:layout_marginBottom="20dp"/>
 

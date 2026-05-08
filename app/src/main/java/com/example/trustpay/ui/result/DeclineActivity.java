@@ -56,6 +56,11 @@ public class DeclineActivity extends AppCompatActivity {
             }
         }
 
+        if (cleanReason.contains("<html") || cleanReason.contains("<!doctype html")
+                || cleanReason.contains("Werkzeug Debugger") || cleanReason.contains("Traceback")) {
+            return "Face verification failed because the backend returned an error. Please restart the backend and try again.";
+        }
+
         return cleanReason;
     }
 }

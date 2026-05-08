@@ -4,12 +4,17 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.Range;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.Manifest;
@@ -17,6 +22,7 @@ import android.Manifest;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
@@ -32,7 +38,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.trustpay.R;
-import com.example.trustpay.network.ApiClient;
+import com.example.trustpay.network.BackendConfig;
 import com.example.trustpay.ui.result.DeclineActivity;
 import com.example.trustpay.ui.verification.PinActivity;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -53,11 +59,13 @@ public class LivenessActivity extends AppCompatActivity {
     private ExecutorService cameraExecutor;
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
-    private FaceAnalyzer faceAnalyzer;
     String senderUpi;
     String receiverUpi;
     String amount;
     boolean isFaceVerificationRunning = false;
+
+    String VERIFY_FACE_URL = BackendConfig.endpoint("verify-face");
+    String FAILED_TRANSACTION_URL = BackendConfig.endpoint("failed-transaction");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,12 +84,6 @@ public class LivenessActivity extends AppCompatActivity {
         senderUpi = getIntent().getStringExtra("sender_upi");
         receiverUpi = getIntent().getStringExtra("receiver_upi");
         amount = getIntent().getStringExtra("amount");
-
-        if (senderUpi == null || senderUpi.trim().isEmpty()) {
-            Toast.makeText(this, "Sender UPI is missing for verification", Toast.LENGTH_LONG).show();
-            finish();
-            return;
-        }
 
         // ✅ Handle permission ONCE
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -127,7 +129,8 @@ public class LivenessActivity extends AppCompatActivity {
                         }
 
                         Bitmap rotatedBitmap = rotateAndMirrorBitmap(bitmap, rotationDegrees);
-                        String faceBase64 = encodeBitmapToBase64(rotatedBitmap);
+                        Bitmap enhancedBitmap = enhanceFaceBitmap(rotatedBitmap);
+                        String faceBase64 = encodeBitmapToBase64(enhancedBitmap);
                         runOnUiThread(() -> verifyFaceWithBackend(faceBase64));
                     }
 
@@ -151,7 +154,7 @@ public class LivenessActivity extends AppCompatActivity {
             RequestQueue queue = Volley.newRequestQueue(this);
             JsonObjectRequest request = new JsonObjectRequest(
                     Request.Method.POST,
-                    ApiClient.getEndpoint("verify-face"),
+                    VERIFY_FACE_URL,
                     jsonBody,
                     response -> {
                         isFaceVerificationRunning = false;
@@ -166,19 +169,16 @@ public class LivenessActivity extends AppCompatActivity {
                             startActivity(intent);
                             finish();
                         } else {
-                            goToDecline(response.optString(
-                                    "message",
-                                    "Face does not match registered user"
-                            ));
+                            logFailedTransactionAndDecline("Face does not match registered user");
                         }
                     },
                     error -> {
                         isFaceVerificationRunning = false;
-                        String message = "Face verification failed";
+                        String message = "Face verification failed. Please try again in better light.";
                         if (error.networkResponse != null && error.networkResponse.data != null) {
-                            message = extractMessage(new String(error.networkResponse.data));
+                            message = getVerificationErrorMessage(new String(error.networkResponse.data));
                         }
-                        goToDecline(message);
+                        logFailedTransactionAndDecline(message);
                     }) {
                 @Override
                 public Map<String, String> getHeaders() {
@@ -191,16 +191,54 @@ public class LivenessActivity extends AppCompatActivity {
             queue.add(request);
         } catch (Exception e) {
             isFaceVerificationRunning = false;
-            goToDecline("Face verification error");
+            logFailedTransactionAndDecline("Face verification error");
         }
     }
 
-    private String extractMessage(String rawResponse) {
+    private String getVerificationErrorMessage(String errorBody) {
+        if (errorBody == null || errorBody.trim().isEmpty()) {
+            return "Face verification failed. Please try again in better light.";
+        }
+
+        String cleanBody = errorBody.trim();
+
+        if (cleanBody.startsWith("{") && cleanBody.endsWith("}")) {
+            try {
+                JSONObject jsonObject = new JSONObject(cleanBody);
+                String message = jsonObject.optString("message", "");
+                if (!message.isEmpty()) {
+                    return message;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (cleanBody.contains("<html") || cleanBody.contains("<!doctype html")
+                || cleanBody.contains("Werkzeug Debugger") || cleanBody.contains("Traceback")) {
+            return "Face verification failed because the backend returned an error. Please restart the backend and try again.";
+        }
+
+        return cleanBody;
+    }
+
+    private void logFailedTransactionAndDecline(String reason) {
         try {
-            JSONObject object = new JSONObject(rawResponse);
-            return object.optString("message", rawResponse);
-        } catch (Exception ignored) {
-            return rawResponse;
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("sender_upi", senderUpi);
+            jsonBody.put("receiver_upi", receiverUpi);
+            jsonBody.put("amount", amount);
+
+            RequestQueue queue = Volley.newRequestQueue(this);
+            JsonObjectRequest request = new JsonObjectRequest(
+                    Request.Method.POST,
+                    FAILED_TRANSACTION_URL,
+                    jsonBody,
+                    response -> goToDecline(reason),
+                    error -> goToDecline(reason)
+            );
+            queue.add(request);
+        } catch (Exception e) {
+            goToDecline(reason);
         }
     }
 
@@ -246,21 +284,23 @@ public class LivenessActivity extends AppCompatActivity {
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build();
 
-                faceAnalyzer = new FaceAnalyzer(
-                        message -> runOnUiThread(() -> tvLivenessInstruction.setText(message)),
-                        () -> runOnUiThread(this::onLivenessSuccess)
+                imageAnalysis.setAnalyzer(cameraExecutor,
+                        new FaceAnalyzer(
+                                message -> runOnUiThread(() -> tvLivenessInstruction.setText(message)),
+                                () -> runOnUiThread(this::onLivenessSuccess)
+                        )
                 );
-                imageAnalysis.setAnalyzer(cameraExecutor, faceAnalyzer);
 
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA;
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(
+                Camera camera = cameraProvider.bindToLifecycle(
                         this, cameraSelector, preview, imageCapture, imageAnalysis
                 );
+                applyLowLightCameraSettings(camera);
 
             } catch (Exception e) {
-                Toast.makeText(this, "Unable to start verification camera", Toast.LENGTH_SHORT).show();
+                e.printStackTrace();
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -324,15 +364,40 @@ public class LivenessActivity extends AppCompatActivity {
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
     }
 
+    private void applyLowLightCameraSettings(Camera camera) {
+        try {
+            Range<Integer> range = camera.getCameraInfo()
+                    .getExposureState()
+                    .getExposureCompensationRange();
+            if (range != null && range.getUpper() > 0) {
+                int boost = Math.min(range.getUpper(), 2);
+                camera.getCameraControl().setExposureCompensationIndex(boost);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private Bitmap enhanceFaceBitmap(Bitmap bitmap) {
+        Bitmap output = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+        ColorMatrix matrix = new ColorMatrix(new float[]{
+                1.28f, 0f, 0f, 0f, 26f,
+                0f, 1.28f, 0f, 0f, 26f,
+                0f, 0f, 1.28f, 0f, 26f,
+                0f, 0f, 0f, 1f, 0f
+        });
+        paint.setColorFilter(new ColorMatrixColorFilter(matrix));
+        canvas.drawBitmap(bitmap, 0f, 0f, paint);
+        return output;
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
         if (cameraProvider != null) {
             cameraProvider.unbindAll();
-        }
-        if (faceAnalyzer != null) {
-            faceAnalyzer.close();
         }
         if (cameraExecutor != null) {
             cameraExecutor.shutdown();
